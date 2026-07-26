@@ -75,9 +75,41 @@ try
 
     // var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     //     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-                          ?? builder.Configuration["DATABASE_URL"]
-                          ?? throw new InvalidOperationException("Connection string not found.");
+    string? connectionString;
+
+    if (builder.Environment.IsDevelopment())
+    {
+        connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    }
+    else
+    {
+        connectionString = builder.Configuration["DATABASE_URL"];
+    }
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("Connection string not found.");
+    }
+
+    // Railway DATABASE_URL ko Npgsql format me convert karo
+    if (connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase) ||
+        connectionString.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase))
+    {
+        var uri = new Uri(connectionString);
+
+        var userInfo = uri.UserInfo.Split(':', 2);
+
+        connectionString =
+            $"Host={uri.Host};" +
+            $"Port={uri.Port};" +
+            $"Database={uri.AbsolutePath.TrimStart('/')};" +
+            $"Username={userInfo[0]};" +
+            $"Password={userInfo[1]};" +
+            $"SSL Mode=Require;Trust Server Certificate=true";
+    }
+
+    Console.WriteLine($"Environment: {builder.Environment.EnvironmentName}");
+    Console.WriteLine($"Using DB Host: {connectionString}");
 
     // Railway DATABASE_URL ko Npgsql format me convert karo
     if (connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase) ||
