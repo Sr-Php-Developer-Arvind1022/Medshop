@@ -31,6 +31,8 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    builder.Configuration.AddJsonFile("cors.origins.json", optional: true, reloadOnChange: true);
+
     builder.Host.UseSerilog((context, services, loggerConfiguration) =>
         loggerConfiguration
             .ReadFrom.Configuration(context.Configuration)
@@ -41,6 +43,38 @@ try
     builder.Services
         .AddControllers()
         .AddApplicationPart(typeof(AuthController).Assembly);
+
+    var corsOrigins = builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>()
+        ?? Array.Empty<string>();
+
+    var corsOriginsFromEnv = builder.Configuration["CORS_ALLOWED_ORIGINS"];
+    if (!string.IsNullOrWhiteSpace(corsOriginsFromEnv))
+    {
+        corsOrigins = corsOrigins
+            .Concat(corsOriginsFromEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("FrontendCors", policy =>
+        {
+            if (corsOrigins.Length == 0)
+            {
+                policy.WithOrigins("http://localhost:5173")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+                return;
+            }
+
+            policy.WithOrigins(corsOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
+    });
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
@@ -173,6 +207,7 @@ try
     app.UseMiddleware<ExceptionHandlingMiddleware>();
 
     app.UseHttpsRedirection();
+    app.UseCors("FrontendCors");
 
     app.UseAuthentication();
     app.UseAuthorization();
