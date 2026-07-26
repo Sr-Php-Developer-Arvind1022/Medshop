@@ -111,6 +111,7 @@ try
     Console.WriteLine($"Environment: {builder.Environment.EnvironmentName}");
     Console.WriteLine($"Using DB Host: {connectionString}");
 
+
     // Railway DATABASE_URL ko Npgsql format me convert karo
     if (connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase) ||
         connectionString.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase))
