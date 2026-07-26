@@ -1,0 +1,7 @@
+@"
+bin/
+obj/
+.vs/
+.tempDbInspect/
+server-*.txt
+"@ | Out-File -Encoding utf8 .gitignore

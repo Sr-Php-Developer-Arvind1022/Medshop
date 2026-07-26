@@ -1,0 +1,124 @@
+@Medshop_HostAddress = http://localhost:5176
+
+POST {{Medshop_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+	"email": "user@example.com",
+	"password": "Password@123"
+}
+
+###
+
+POST {{Medshop_HostAddress}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+	"email": "user@example.com"
+}
+
+###
+
+POST {{Medshop_HostAddress}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+	"resetToken": "paste-reset-token-here",
+	"newPassword": "NewPassword@123",
+	"confirmPassword": "NewPassword@123"
+}
+
+###
+
+POST {{Medshop_HostAddress}}/api/auth/refresh-token
+Content-Type: application/json
+
+{
+	"refreshToken": "paste-refresh-token-here"
+}
+
+###
+
+POST {{Medshop_HostAddress}}/api/products
+Authorization: Bearer paste-access-token-here
+Content-Type: multipart/form-data; boundary=ProductBoundary
+
+--ProductBoundary
+Content-Disposition: form-data; name="name"
+
+Pain Relief Gel
+--ProductBoundary
+Content-Disposition: form-data; name="description"
+
+Fast relief topical gel
+--ProductBoundary
+Content-Disposition: form-data; name="category"
+
+Medicine
+--ProductBoundary
+Content-Disposition: form-data; name="price"
+
+199.99
+--ProductBoundary
+Content-Disposition: form-data; name="stockQuantity"
+
+50
+--ProductBoundary--
+
+###
+
+PUT {{Medshop_HostAddress}}/api/products/00000000-0000-0000-0000-000000000000
+Authorization: Bearer paste-access-token-here
+Content-Type: multipart/form-data; boundary=ProductBoundary
+
+--ProductBoundary
+Content-Disposition: form-data; name="name"
+
+Updated Product Name
+--ProductBoundary
+Content-Disposition: form-data; name="description"
+
+Updated description
+--ProductBoundary
+Content-Disposition: form-data; name="category"
+
+Medicine
+--ProductBoundary
+Content-Disposition: form-data; name="price"
+
+249.99
+--ProductBoundary
+Content-Disposition: form-data; name="stockQuantity"
+
+60
+--ProductBoundary--
+
+###
+
+DELETE {{Medshop_HostAddress}}/api/products/00000000-0000-0000-0000-000000000000
+Authorization: Bearer paste-access-token-here
+
+###
+
+GET {{Medshop_HostAddress}}/api/products?pageNumber=1&pageSize=10&search=gel&category=Medicine&minPrice=100&maxPrice=300
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/products/00000000-0000-0000-0000-000000000000
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/products/00000000-0000-0000-0000-000000000000/login/00000000-0000-0000-0000-000000000000
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/
+Accept: application/json
+
+###

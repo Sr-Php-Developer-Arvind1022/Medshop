@@ -1,0 +1,9 @@
+Using launch settings from C:\DotNet\Medshop\Properties\launchSettings.json...
+Building...
+===== APPLICATION STARTING =====
+Services Registered
+App Build Completed
+===== REGISTERED ENDPOINTS =====
+Medshop.Modules.Identity.API.Controllers.AuthController.Register (Medshop)
+Medshop.Modules.Identity.API.Controllers.AuthController.Login (Medshop)
+Before app.Run()
