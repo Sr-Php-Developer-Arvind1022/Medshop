@@ -57,7 +57,8 @@ public class ProductService : IProductService
         product.Name = request.Name;
         product.Description = request.Description;
         product.Category = request.Category;
-        product.Price = request.Price;
+        product.PurchasePrice = request.PurchasePrice;
+        product.SellingPrice = request.SellingPrice;
         product.StockQuantity = request.StockQuantity;
         product.UpdatedAt = DateTime.UtcNow;
 
@@ -97,8 +98,10 @@ public class ProductService : IProductService
             pageSize,
             request.Search,
             request.Category,
-            request.MinPrice,
-            request.MaxPrice,
+            request.MinPurchasePrice,
+            request.MaxPurchasePrice,
+            request.MinSellingPrice ?? request.MinPrice,
+            request.MaxSellingPrice ?? request.MaxPrice,
             request.LoginId,
             cancellationToken);
 
@@ -110,6 +113,18 @@ public class ProductService : IProductService
             TotalCount = totalCount,
             TotalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize)
         };
+    }
+
+    public async Task<IReadOnlyCollection<ProductResponse>> SearchMedicinesByLoginIdAsync(string? keyword, Guid loginId, CancellationToken cancellationToken)
+    {
+        var items = await _productRepository.SearchByLoginIdAsync(loginId, keyword, cancellationToken);
+        return _mapper.Map<IReadOnlyCollection<ProductResponse>>(items);
+    }
+
+    public async Task<IReadOnlyCollection<ProductResponse>> SearchByNameAsync(string? name, Guid loginId, CancellationToken cancellationToken)
+    {
+        var items = await _productRepository.SearchByNameAsync(loginId, name, cancellationToken);
+        return _mapper.Map<IReadOnlyCollection<ProductResponse>>(items);
     }
 
     public async Task<ProductResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken)

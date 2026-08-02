@@ -10,6 +10,8 @@ public interface IProductService
     Task<ProductResponse> UpdateAsync(Guid id, UpdateProductRequest request, Guid loginId, CancellationToken cancellationToken);
     Task SoftDeleteAsync(Guid id, Guid loginId, CancellationToken cancellationToken);
     Task<PagedResult<ProductResponse>> GetPagedAsync(GetProductsRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ProductResponse>> SearchMedicinesByLoginIdAsync(string? keyword, Guid loginId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ProductResponse>> SearchByNameAsync(string? name, Guid loginId, CancellationToken cancellationToken);
     Task<ProductResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<ProductResponse> GetByIdAndLoginIdAsync(Guid id, Guid loginId, CancellationToken cancellationToken);
 }

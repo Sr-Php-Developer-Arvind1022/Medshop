@@ -45,21 +45,37 @@ public class ProductsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<ProductResponse>>>> GetPaged([FromQuery] GetProductsRequest request, CancellationToken cancellationToken)
     {
+        request.LoginId = GetCurrentLoginId();
         var response = await _productService.GetPagedAsync(request, cancellationToken);
         return Ok(ApiResponse<PagedResult<ProductResponse>>.SuccessResult(response, "Products fetched successfully"));
+    }
+
+    [HttpGet("search-medicine-by-login-id")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<ProductResponse>>>> SearchMedicineByLoginId([FromQuery] string? keyword, CancellationToken cancellationToken)
+    {
+        var response = await _productService.SearchMedicinesByLoginIdAsync(keyword, GetCurrentLoginId(), cancellationToken);
+        return Ok(ApiResponse<IReadOnlyCollection<ProductResponse>>.SuccessResult(response, "Products fetched successfully"));
+    }
+
+    [HttpGet("search")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<ProductResponse>>>> SearchByName([FromQuery] string? name, CancellationToken cancellationToken)
+    {
+        var response = await _productService.SearchByNameAsync(name, GetCurrentLoginId(), cancellationToken);
+        return Ok(ApiResponse<IReadOnlyCollection<ProductResponse>>.SuccessResult(response, "Products fetched successfully"));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<ProductResponse>>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var response = await _productService.GetByIdAsync(id, cancellationToken);
+        var response = await _productService.GetByIdAndLoginIdAsync(id, GetCurrentLoginId(), cancellationToken);
         return Ok(ApiResponse<ProductResponse>.SuccessResult(response, "Product fetched successfully"));
     }
 
     [HttpGet("{id:guid}/login/{loginId:guid}")]
     public async Task<ActionResult<ApiResponse<ProductResponse>>> GetByIdAndLoginId(Guid id, Guid loginId, CancellationToken cancellationToken)
     {
-        var response = await _productService.GetByIdAndLoginIdAsync(id, loginId, cancellationToken);
+        _ = loginId;
+        var response = await _productService.GetByIdAndLoginIdAsync(id, GetCurrentLoginId(), cancellationToken);
         return Ok(ApiResponse<ProductResponse>.SuccessResult(response, "Product fetched successfully"));
     }
 

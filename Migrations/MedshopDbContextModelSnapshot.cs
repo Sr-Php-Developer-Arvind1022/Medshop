@@ -22,19 +22,17 @@ namespace Medshop.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Medshop.Modules.Products.Domain.Entities.Product", b =>
+            modelBuilder.Entity("Medshop.Modules.Categories.Domain.Entities.Category", b =>
                 {
-                    b.Property<long>("ProductIdPk")
+                    b.Property<long>("CategoryIdPk")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
-                        .HasColumnName("product_id_pk");
+                        .HasColumnName("category_id_pk");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ProductIdPk"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("CategoryIdPk"));
 
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                    b.Property<string>("CategoryImage")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -43,10 +41,14 @@ namespace Medshop.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text");
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
@@ -59,28 +61,67 @@ namespace Medshop.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<decimal>("Price")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("ProductImage")
-                        .HasColumnType("text");
-
-                    b.Property<int>("StockQuantity")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("ProductIdPk");
-
-                    b.HasIndex("Category");
+                    b.HasKey("CategoryIdPk");
 
                     b.HasIndex("Id")
                         .IsUnique();
 
+                    b.HasIndex("IsActive");
+
                     b.HasIndex("LoginId");
 
-                    b.ToTable("Products");
+                    b.HasIndex("Name");
+
+                    b.ToTable("Categories");
+                });
+
+            modelBuilder.Entity("Medshop.Modules.Customers.Domain.Entities.Customer", b =>
+                {
+                    b.Property<long>("CustomerIdPk")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("customer_pk");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("CustomerIdPk"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("LoginId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Mobile")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CustomerIdPk");
+
+                    b.HasIndex("Id")
+                        .IsUnique();
+
+                    b.HasIndex("LoginId", "Mobile")
+                        .IsUnique();
+
+                    b.ToTable("customers", (string)null);
                 });
 
             modelBuilder.Entity("Medshop.Modules.Identity.Domain.Entities.User", b =>
@@ -152,6 +193,239 @@ namespace Medshop.Migrations
                     b.HasIndex("Id");
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Medshop.Modules.Products.Domain.Entities.Product", b =>
+                {
+                    b.Property<long>("ProductIdPk")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("product_id_pk");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ProductIdPk"));
+
+                    b.Property<string>("BatchNo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("batch_no");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ExpiryDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expiry_date");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("LoginId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Manufacturer")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("manufacturer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProductImage")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("PurchasePrice")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("SellingPrice")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("StockQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ProductIdPk");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("Id")
+                        .IsUnique();
+
+                    b.HasIndex("LoginId");
+
+                    b.ToTable("Products");
+                });
+
+            modelBuilder.Entity("Medshop.Modules.Sales.Domain.Entities.Sale", b =>
+                {
+                    b.Property<long>("SaleIdPk")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("sale_pk");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("SaleIdPk"));
+
+                    b.Property<DateTime>("BillDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("bill_date");
+
+                    b.Property<string>("BillNo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("bill_no");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("CustomerFk")
+                        .HasColumnType("bigint")
+                        .HasColumnName("customer_fk");
+
+                    b.Property<decimal>("Discount")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("discount");
+
+                    b.Property<decimal>("GrandTotal")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("grand_total");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("LoginId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentMode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("payment_mode");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("subtotal");
+
+                    b.Property<decimal>("Tax")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("tax");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SaleIdPk");
+
+                    b.HasIndex("BillDate");
+
+                    b.HasIndex("CustomerFk");
+
+                    b.HasIndex("Id")
+                        .IsUnique();
+
+                    b.HasIndex("LoginId", "BillNo")
+                        .IsUnique();
+
+                    b.ToTable("sales", (string)null);
+                });
+
+            modelBuilder.Entity("Medshop.Modules.Sales.Domain.Entities.SaleItem", b =>
+                {
+                    b.Property<long>("SaleItemIdPk")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("sale_item_pk");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("SaleItemIdPk"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("price");
+
+                    b.Property<long>("ProductFk")
+                        .HasColumnType("bigint")
+                        .HasColumnName("product_fk");
+
+                    b.Property<decimal>("PurchasePrice")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("purchase_price");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<long>("SaleFk")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sale_fk");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SaleItemIdPk");
+
+                    b.HasIndex("ProductFk");
+
+                    b.HasIndex("SaleFk");
+
+                    b.ToTable("sale_items", (string)null);
+                });
+
+            modelBuilder.Entity("Medshop.Modules.Sales.Domain.Entities.Sale", b =>
+                {
+                    b.HasOne("Medshop.Modules.Customers.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerFk")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("Medshop.Modules.Sales.Domain.Entities.SaleItem", b =>
+                {
+                    b.HasOne("Medshop.Modules.Products.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductFk")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Medshop.Modules.Sales.Domain.Entities.Sale", "Sale")
+                        .WithMany("Items")
+                        .HasForeignKey("SaleFk")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Sale");
+                });
+
+            modelBuilder.Entity("Medshop.Modules.Sales.Domain.Entities.Sale", b =>
+                {
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

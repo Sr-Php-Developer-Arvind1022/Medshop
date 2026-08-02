@@ -20,6 +20,12 @@ public class ProductRepository : IProductRepository
         await _context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<Product?> GetByPrimaryKeyAsync(long productIdPk, CancellationToken cancellationToken)
+        => await _context.Products.FirstOrDefaultAsync(p => p.ProductIdPk == productIdPk && !p.IsDeleted, cancellationToken);
+
+    public async Task<Product?> GetByPrimaryKeyAndLoginIdAsync(long productIdPk, Guid loginId, CancellationToken cancellationToken)
+        => await _context.Products.FirstOrDefaultAsync(p => p.ProductIdPk == productIdPk && p.LoginId == loginId && !p.IsDeleted, cancellationToken);
+
     public async Task<Product?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
         => await _context.Products.FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted, cancellationToken);
 
@@ -31,8 +37,10 @@ public class ProductRepository : IProductRepository
         int pageSize,
         string? search,
         string? category,
-        decimal? minPrice,
-        decimal? maxPrice,
+        decimal? minPurchasePrice,
+        decimal? maxPurchasePrice,
+        decimal? minSellingPrice,
+        decimal? maxSellingPrice,
         Guid? loginId,
         CancellationToken cancellationToken)
     {
@@ -54,14 +62,24 @@ public class ProductRepository : IProductRepository
             query = query.Where(p => p.Category.ToLower() == normalizedCategory);
         }
 
-        if (minPrice.HasValue)
+        if (minPurchasePrice.HasValue)
         {
-            query = query.Where(p => p.Price >= minPrice.Value);
+            query = query.Where(p => p.PurchasePrice >= minPurchasePrice.Value);
         }
 
-        if (maxPrice.HasValue)
+        if (maxPurchasePrice.HasValue)
         {
-            query = query.Where(p => p.Price <= maxPrice.Value);
+            query = query.Where(p => p.PurchasePrice <= maxPurchasePrice.Value);
+        }
+
+        if (minSellingPrice.HasValue)
+        {
+            query = query.Where(p => p.SellingPrice >= minSellingPrice.Value);
+        }
+
+        if (maxSellingPrice.HasValue)
+        {
+            query = query.Where(p => p.SellingPrice <= maxSellingPrice.Value);
         }
 
         if (loginId.HasValue)
@@ -78,6 +96,43 @@ public class ProductRepository : IProductRepository
             .ToListAsync(cancellationToken);
 
         return (items, totalCount);
+    }
+
+    public async Task<IReadOnlyCollection<Product>> SearchByLoginIdAsync(Guid loginId, string? keyword, CancellationToken cancellationToken)
+    {
+        var query = _context.Products
+            .AsNoTracking()
+            .Where(p => p.LoginId == loginId && !p.IsDeleted);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var normalizedKeyword = keyword.Trim().ToLower();
+            query = query.Where(p => p.Name.ToLower().Contains(normalizedKeyword)
+                || (p.Description != null && p.Description.ToLower().Contains(normalizedKeyword))
+                || p.Category.ToLower().Contains(normalizedKeyword));
+        }
+
+        return await query
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Product>> SearchByNameAsync(Guid loginId, string? name, CancellationToken cancellationToken)
+    {
+        var query = _context.Products
+            .AsNoTracking()
+            .Where(p => p.LoginId == loginId && !p.IsDeleted);
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var normalizedName = name.Trim().ToLower();
+            query = query.Where(p => p.Name.ToLower().Contains(normalizedName));
+        }
+
+        return await query
+            .OrderBy(p => p.Name)
+            .Take(50)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(Product product, CancellationToken cancellationToken)

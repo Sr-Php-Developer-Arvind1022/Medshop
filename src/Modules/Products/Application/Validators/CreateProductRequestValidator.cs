@@ -15,8 +15,12 @@ public class CreateProductRequestValidator : AbstractValidator<CreateProductRequ
             .NotEmpty().WithMessage("Category is required.")
             .MaximumLength(100).WithMessage("Category cannot exceed 100 characters.");
 
-        RuleFor(x => x.Price)
-            .GreaterThan(0).WithMessage("Price must be greater than zero.");
+        RuleFor(x => x.PurchasePrice)
+            .GreaterThan(0).WithMessage("Purchase price must be greater than zero.");
+
+        RuleFor(x => x.SellingPrice)
+            .GreaterThan(0).WithMessage("Selling price must be greater than zero.")
+            .GreaterThanOrEqualTo(x => x.PurchasePrice).WithMessage("Selling price cannot be less than purchase price.");
 
         RuleFor(x => x.StockQuantity)
             .GreaterThanOrEqualTo(0).WithMessage("Stock quantity cannot be negative.");

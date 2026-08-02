@@ -18,6 +18,7 @@ public class ProductProfile : Profile
             .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
             .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
 
-        CreateMap<Product, ProductResponse>();
+        CreateMap<Product, ProductResponse>()
+            .ForMember(dest => dest.ProductPk, opt => opt.MapFrom(src => src.ProductIdPk));
     }
 }

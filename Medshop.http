@@ -56,9 +56,13 @@ Content-Disposition: form-data; name="category"
 
 Medicine
 --ProductBoundary
-Content-Disposition: form-data; name="price"
+Content-Disposition: form-data; name="purchasePrice"
 
 199.99
+--ProductBoundary
+Content-Disposition: form-data; name="sellingPrice"
+
+249.99
 --ProductBoundary
 Content-Disposition: form-data; name="stockQuantity"
 
@@ -84,9 +88,13 @@ Content-Disposition: form-data; name="category"
 
 Medicine
 --ProductBoundary
-Content-Disposition: form-data; name="price"
+Content-Disposition: form-data; name="purchasePrice"
 
 249.99
+--ProductBoundary
+Content-Disposition: form-data; name="sellingPrice"
+
+299.99
 --ProductBoundary
 Content-Disposition: form-data; name="stockQuantity"
 
@@ -100,7 +108,7 @@ Authorization: Bearer paste-access-token-here
 
 ###
 
-GET {{Medshop_HostAddress}}/api/products?pageNumber=1&pageSize=10&search=gel&category=Medicine&minPrice=100&maxPrice=300
+GET {{Medshop_HostAddress}}/api/products?pageNumber=1&pageSize=10&search=gel&category=Medicine&minPurchasePrice=100&maxPurchasePrice=300&minSellingPrice=150&maxSellingPrice=400
 Authorization: Bearer paste-access-token-here
 Accept: application/json
 
@@ -113,6 +121,161 @@ Accept: application/json
 ###
 
 GET {{Medshop_HostAddress}}/api/products/00000000-0000-0000-0000-000000000000/login/00000000-0000-0000-0000-000000000000
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+POST {{Medshop_HostAddress}}/api/categories
+Authorization: Bearer paste-access-token-here
+Content-Type: multipart/form-data; boundary=CategoryBoundary
+
+--CategoryBoundary
+Content-Disposition: form-data; name="name"
+
+Pain Relief
+--CategoryBoundary
+Content-Disposition: form-data; name="description"
+
+Pain management medicines and products
+--CategoryBoundary
+Content-Disposition: form-data; name="isActive"
+
+true
+--CategoryBoundary--
+
+###
+
+PUT {{Medshop_HostAddress}}/api/categories/00000000-0000-0000-0000-000000000000
+Authorization: Bearer paste-access-token-here
+Content-Type: multipart/form-data; boundary=CategoryBoundary
+
+--CategoryBoundary
+Content-Disposition: form-data; name="name"
+
+Updated Category Name
+--CategoryBoundary
+Content-Disposition: form-data; name="description"
+
+Updated category description
+--CategoryBoundary
+Content-Disposition: form-data; name="isActive"
+
+false
+--CategoryBoundary--
+
+###
+
+DELETE {{Medshop_HostAddress}}/api/categories/00000000-0000-0000-0000-000000000000
+Authorization: Bearer paste-access-token-here
+
+###
+
+GET {{Medshop_HostAddress}}/api/categories?pageNumber=1&pageSize=10&search=pain&isActive=true
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/categories/00000000-0000-0000-0000-000000000000
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/products/search?name=gel
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/customers/search?mobile=9876543210
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+POST {{Medshop_HostAddress}}/api/sales
+Authorization: Bearer paste-access-token-here
+Content-Type: application/json
+
+{
+	"customer": {
+		"name": "Ravi",
+		"mobile": "9876543210",
+		"address": "Mumbai"
+	},
+	"discount": 20,
+	"tax": 10,
+	"paymentMode": "Cash",
+	"items": [
+		{
+			"productFk": 1,
+			"quantity": 2
+		},
+		{
+			"productFk": 5,
+			"quantity": 3
+		}
+	]
+}
+
+###
+
+GET {{Medshop_HostAddress}}/api/sales?pageNumber=1&pageSize=10&search=INV&paymentMode=Cash&customerMobile=9876&fromDate=2026-08-01&toDate=2026-08-31
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/sales/1
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+DELETE {{Medshop_HostAddress}}/api/sales/1
+Authorization: Bearer paste-access-token-here
+
+###
+
+GET {{Medshop_HostAddress}}/api/reports/sales/today
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/reports/sales/yesterday
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/reports/sales/last-7-days
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/reports/sales/last-30-days
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/reports/sales/this-year
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/reports/sales/custom?fromDate=2026-08-01&toDate=2026-08-31
+Authorization: Bearer paste-access-token-here
+Accept: application/json
+
+###
+
+GET {{Medshop_HostAddress}}/api/dashboard
 Authorization: Bearer paste-access-token-here
 Accept: application/json
 
