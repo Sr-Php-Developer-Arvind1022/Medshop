@@ -6,6 +6,7 @@ using Medshop.Modules.Categories.Application.Services;
 using Medshop.Modules.Categories.Application.Validators;
 using Medshop.Modules.Categories.Domain.Interfaces;
 using Medshop.Modules.Categories.Infrastructure.Repositories;
+using Medshop.Modules.Categories.Infrastructure.Seed;
 using Medshop.Modules.Customers.Application.Interfaces;
 using Medshop.Modules.Customers.Application.Services;
 using Medshop.Modules.Customers.Infrastructure.Repositories;
@@ -224,6 +225,7 @@ try
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<MedshopDbContext>();
         await dbContext.Database.MigrateAsync();
+        await CategorySeeder.SeedAsync(dbContext);
     }
 
     app.UseSwagger();

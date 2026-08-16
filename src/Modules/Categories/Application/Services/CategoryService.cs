@@ -99,7 +99,7 @@ public class CategoryService : ICategoryService
     public async Task<PagedResult<CategoryResponse>> GetPagedAsync(GetCategoriesRequest request, Guid loginId, CancellationToken cancellationToken)
     {
         var pageNumber = request.PageNumber <= 0 ? 1 : request.PageNumber;
-        var pageSize = request.PageSize <= 0 ? 10 : Math.Min(request.PageSize, 100);
+        var pageSize = request.PageSize <= 0 ? 100 : Math.Min(request.PageSize, 100);
 
         var (items, totalCount) = await _categoryRepository.GetPagedAsync(
             pageNumber,

@@ -24,16 +24,14 @@ public class DashboardService : IDashboardService
         DateTime? endDate,
         CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow.Date;
+        var now = ToUtcDate(DateTime.UtcNow.Date);
         var (rangeStart, rangeEndExclusive) = ResolveRange(filter, startDate, endDate, now);
+        var (graphStart, graphEndExclusive) = ResolveGraphRange(filter, startDate, endDate, now);
 
         var todayStart = now;
         var todayEnd = now.AddDays(1);
         var yesterdayStart = now.AddDays(-1);
         var yesterdayEnd = now;
-
-        var graphEndExclusive = todayEnd;
-        var graphStart = graphEndExclusive.AddDays(-7);
 
         var cards = await _dashboardRepository.GetCardsAsync(loginId, todayStart, todayEnd, LowStockThreshold, cancellationToken);
         var stockSummary = await _dashboardRepository.GetStockSummaryAsync(loginId, rangeStart, rangeEndExclusive, cancellationToken);
@@ -84,8 +82,22 @@ public class DashboardService : IDashboardService
             "today" => (today, today.AddDays(1)),
             "yesterday" => (today.AddDays(-1), today),
             "week" => (today.AddDays(-6), today.AddDays(1)),
-            "month" => (new DateTime(today.Year, today.Month, 1), new DateTime(today.Year, today.Month, 1).AddMonths(1)),
-            "year" => (new DateTime(today.Year, 1, 1), new DateTime(today.Year, 1, 1).AddYears(1)),
+            "month" => (ToUtcDate(new DateTime(today.Year, today.Month, 1)), ToUtcDate(new DateTime(today.Year, today.Month, 1).AddMonths(1))),
+            "year" => (ToUtcDate(new DateTime(today.Year, 1, 1)), ToUtcDate(new DateTime(today.Year, 1, 1).AddYears(1))),
+            "custom" => ResolveCustomRange(startDate, endDate),
+            _ => throw new ArgumentException("Invalid filter. Allowed values: today, yesterday, week, month, year, custom.")
+        };
+    }
+
+    private static (DateTime Start, DateTime EndExclusive) ResolveGraphRange(string? filter, DateTime? startDate, DateTime? endDate, DateTime today)
+    {
+        var normalized = string.IsNullOrWhiteSpace(filter) ? "today" : filter.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            "today" or "yesterday" or "week" => (today.AddDays(-6), today.AddDays(1)),
+            "month" => (ToUtcDate(new DateTime(today.Year, today.Month, 1)), ToUtcDate(new DateTime(today.Year, today.Month, 1).AddMonths(1))),
+            "year" => (ToUtcDate(new DateTime(today.Year, 1, 1)), ToUtcDate(new DateTime(today.Year, 1, 1).AddYears(1))),
             "custom" => ResolveCustomRange(startDate, endDate),
             _ => throw new ArgumentException("Invalid filter. Allowed values: today, yesterday, week, month, year, custom.")
         };
@@ -98,8 +110,8 @@ public class DashboardService : IDashboardService
             throw new ArgumentException("startDate and endDate are required when filter=custom.");
         }
 
-        var start = startDate.Value.Date;
-        var end = endDate.Value.Date;
+        var start = ToUtcDate(startDate.Value.Date);
+        var end = ToUtcDate(endDate.Value.Date);
 
         if (end < start)
         {
@@ -107,5 +119,15 @@ public class DashboardService : IDashboardService
         }
 
         return (start, end.AddDays(1));
+    }
+
+    private static DateTime ToUtcDate(DateTime value)
+    {
+        if (value.Kind == DateTimeKind.Unspecified)
+        {
+            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        }
+
+        return value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : value;
     }
 }

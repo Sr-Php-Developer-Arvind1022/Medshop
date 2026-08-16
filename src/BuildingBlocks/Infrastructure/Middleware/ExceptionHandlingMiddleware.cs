@@ -38,6 +38,14 @@ public class ExceptionHandlingMiddleware
         {
             await WriteResponseAsync(context, (int)HttpStatusCode.BadRequest, ex.Message);
         }
+        catch (ArgumentException ex)
+        {
+            await WriteResponseAsync(context, (int)HttpStatusCode.BadRequest, ex.Message);
+        }
+        catch (FormatException ex)
+        {
+            await WriteResponseAsync(context, (int)HttpStatusCode.BadRequest, ex.Message);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception occurred.");

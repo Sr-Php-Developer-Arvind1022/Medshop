@@ -174,7 +174,7 @@ public class DashboardRepository : IDashboardRepository
             })
             .ToListAsync(cancellationToken);
 
-        return BuildLast7DaysGraph(raw, endDateExclusive.Date.AddDays(-1));
+        return BuildDateRangeGraph(raw, startDate, endDateExclusive);
     }
 
     public async Task<IReadOnlyCollection<DashboardGraphPointReadModel>> GetPurchaseGraphAsync(Guid loginId, DateTime startDate, DateTime endDateExclusive, CancellationToken cancellationToken)
@@ -190,7 +190,7 @@ public class DashboardRepository : IDashboardRepository
             })
             .ToListAsync(cancellationToken);
 
-        return BuildLast7DaysGraph(raw, endDateExclusive.Date.AddDays(-1));
+        return BuildDateRangeGraph(raw, startDate, endDateExclusive);
     }
 
     public async Task<IReadOnlyCollection<DashboardTopSellingProductReadModel>> GetTopSellingProductsAsync(Guid loginId, DateTime rangeStart, DateTime rangeEnd, int take, CancellationToken cancellationToken)
@@ -309,13 +309,12 @@ public class DashboardRepository : IDashboardRepository
         };
     }
 
-    private static IReadOnlyCollection<DashboardGraphPointReadModel> BuildLast7DaysGraph(IEnumerable<DashboardGraphPointReadModel> points, DateTime endDate)
+    private static IReadOnlyCollection<DashboardGraphPointReadModel> BuildDateRangeGraph(IEnumerable<DashboardGraphPointReadModel> points, DateTime startDate, DateTime endDateExclusive)
     {
         var source = points.ToDictionary(x => x.Date.Date, x => x.Amount);
-        var startDate = endDate.AddDays(-6);
 
-        var result = new List<DashboardGraphPointReadModel>(7);
-        for (var date = startDate; date <= endDate; date = date.AddDays(1))
+        var result = new List<DashboardGraphPointReadModel>();
+        for (var date = startDate.Date; date < endDateExclusive.Date; date = date.AddDays(1))
         {
             result.Add(new DashboardGraphPointReadModel
             {
