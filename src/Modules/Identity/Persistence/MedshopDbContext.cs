@@ -90,6 +90,7 @@ public class MedshopDbContext : DbContext
             entity.Property(e => e.Tax).HasColumnName("tax").HasColumnType("numeric(18,2)");
             entity.Property(e => e.GrandTotal).HasColumnName("grand_total").HasColumnType("numeric(18,2)");
             entity.Property(e => e.PaymentMode).HasColumnName("payment_mode").IsRequired().HasMaxLength(50);
+            entity.Property(e => e.DiseaseIllness).HasColumnName("disease_illness").HasMaxLength(500);
             entity.Property(e => e.BillDate).HasColumnName("bill_date");
 
             entity.HasOne(e => e.Customer)

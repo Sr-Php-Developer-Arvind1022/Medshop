@@ -34,6 +34,7 @@ All endpoints require `Authorization: Bearer <token>`.
   "discount": 20,
   "tax": 10,
   "paymentMode": "Cash",
+  "disease_illness": "Hypertension",
   "items": [
     {
       "productFk": 1,

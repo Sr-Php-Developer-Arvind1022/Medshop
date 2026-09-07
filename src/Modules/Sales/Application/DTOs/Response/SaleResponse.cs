@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Medshop.Modules.Sales.Application.DTOs.Response;
 
 public class SaleResponse
@@ -10,6 +12,8 @@ public class SaleResponse
     public decimal Tax { get; set; }
     public decimal GrandTotal { get; set; }
     public string PaymentMode { get; set; } = string.Empty;
+    [JsonPropertyName("disease_illness")]
+    public string? DiseaseIllness { get; set; }
     public DateTime BillDate { get; set; }
     public SaleCustomerResponse Customer { get; set; } = new();
     public IReadOnlyCollection<SaleItemResponse> Items { get; set; } = Array.Empty<SaleItemResponse>();

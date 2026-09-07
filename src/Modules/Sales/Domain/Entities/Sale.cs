@@ -14,6 +14,7 @@ public class Sale
     public decimal Tax { get; set; }
     public decimal GrandTotal { get; set; }
     public string PaymentMode { get; set; } = string.Empty;
+    public string? DiseaseIllness { get; set; }
     public DateTime BillDate { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

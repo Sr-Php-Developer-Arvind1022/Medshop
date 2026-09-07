@@ -17,6 +17,9 @@ public class CreateSaleRequest
     [JsonPropertyName("payment_mode")]
     public string PaymentMode { get; set; } = string.Empty;
 
+    [JsonPropertyName("disease_illness")]
+    public string? DiseaseIllness { get; set; }
+
     [JsonPropertyName("bill_date")]
     public DateTime? BillDate { get; set; }
 

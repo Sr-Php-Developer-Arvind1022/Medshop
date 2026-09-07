@@ -102,6 +102,7 @@ public class SaleService : ISaleService
                 Tax = request.Tax,
                 GrandTotal = subtotal - request.Discount + request.Tax,
                 PaymentMode = request.PaymentMode,
+                DiseaseIllness = request.DiseaseIllness,
                 BillDate = (request.BillDate ?? DateTime.UtcNow).Date,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
