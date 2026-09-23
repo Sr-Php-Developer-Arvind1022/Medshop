@@ -246,14 +246,28 @@ try
     });
 
     var reportDirectory = Path.Combine(AppContext.BaseDirectory, "Report");
+    var reportsDirectory = Path.Combine(AppContext.BaseDirectory, "Reports");
+
     Directory.CreateDirectory(reportDirectory);
+    Directory.CreateDirectory(reportsDirectory);
     Console.WriteLine($"Report directory: {reportDirectory}");
+    Console.WriteLine($"Reports alias directory: {reportsDirectory}");
 
     app.UseStaticFiles();
     app.UseStaticFiles(new StaticFileOptions
     {
         FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(reportDirectory),
+        RequestPath = "/Report"
+    });
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(reportDirectory),
         RequestPath = "/Reports"
+    });
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(reportDirectory),
+        RequestPath = "/reprts"
     });
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();
