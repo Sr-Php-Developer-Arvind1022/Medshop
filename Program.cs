@@ -245,10 +245,13 @@ try
         options.RoutePrefix = "swagger";
     });
 
+    var reportDirectory = Path.Combine(builder.Environment.ContentRootPath, "Report");
+    Directory.CreateDirectory(reportDirectory);
+
     app.UseStaticFiles();
     app.UseStaticFiles(new StaticFileOptions
     {
-        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "Report")),
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(reportDirectory),
         RequestPath = "/Reports"
     });
 
