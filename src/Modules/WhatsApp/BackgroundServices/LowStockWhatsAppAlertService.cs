@@ -103,8 +103,7 @@ public class LowStockWhatsAppAlertService : BackgroundService
         }
 
         var ownerName = profileUser.OwnerName;
-        var productSummary = string.Join(", ", products.Select(p => $"{p.Name} ({p.StockQuantity})"));
-        var totalLowStockQuantity = products.Sum(p => p.StockQuantity);
+        var productSummary = BuildTruncatedProductSummary(products.Select(p => p.Name), maxLength: 120);
 
         var payload = new Dictionary<string, object?>
         {
@@ -113,11 +112,8 @@ public class LowStockWhatsAppAlertService : BackgroundService
             ["variables"] = new Dictionary<string, object>
             {
                 ["name"] = !string.IsNullOrWhiteSpace(ownerName) ? ownerName : "Customer",
-                ["items"] = productSummary,
                 ["products"] = productSummary,
-                ["count"] = products.Count.ToString(),
-                ["amount"] = totalLowStockQuantity.ToString(),
-                ["date"] = DateTime.UtcNow.ToString("dd-MM-yyyy")
+                ["count"] = products.Count.ToString()
             }
         };
 
@@ -150,6 +146,52 @@ public class LowStockWhatsAppAlertService : BackgroundService
         {
             _logger.LogError(ex, "Exception while sending low-stock WhatsApp alert.");
         }
+    }
+
+    private static string BuildTruncatedProductSummary(IEnumerable<string> productEntries, int maxLength)
+    {
+        var entries = productEntries.ToList();
+        var summary = string.Join(", ", entries);
+
+        if (summary.Length <= maxLength)
+        {
+            return summary;
+        }
+
+        // Add entries one at a time until adding the next one (plus a "+N more" suffix) would exceed the limit.
+        var builder = new System.Text.StringBuilder();
+        var includedCount = 0;
+
+        foreach (var entry in entries)
+        {
+            var candidate = builder.Length == 0 ? entry : builder + ", " + entry;
+            var remaining = entries.Count - (includedCount + 1);
+            var suffix = remaining > 0 ? $" +{remaining} more" : string.Empty;
+
+            if (candidate.Length + suffix.Length > maxLength)
+            {
+                break;
+            }
+
+            if (builder.Length > 0)
+            {
+                builder.Append(", ");
+            }
+
+            builder.Append(entry);
+            includedCount++;
+        }
+
+        var remainingCount = entries.Count - includedCount;
+        if (remainingCount > 0)
+        {
+            builder.Append($" +{remainingCount} more");
+        }
+
+        var result = builder.ToString();
+
+        // Safety net: hard-cut in the unlikely case a single entry itself is longer than maxLength.
+        return result.Length > maxLength ? result[..maxLength] : result;
     }
 
     private async Task<User?> GetProfileUserAsync(CancellationToken cancellationToken)
