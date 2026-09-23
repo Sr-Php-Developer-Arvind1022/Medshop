@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Medshop.Modules.Identity.Domain.Entities;
 using Medshop.Modules.Identity.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -74,12 +75,20 @@ public class LowStockWhatsAppAlertService : BackgroundService
             return;
         }
 
-        var profileSettings = await LoadProfileSettingsAsync(cancellationToken);
-        var recipientPhone = profileSettings.BasicDetails?.Phone;
-        var apiKey = !string.IsNullOrWhiteSpace(profileSettings.WhatsApp?.ApiKey)
-            ? profileSettings.WhatsApp.ApiKey
-            : _configuration["WhatsApp:ApiKey"];
-        var templateCode = _configuration["LowStockAlert:TemplateCode"] ?? _configuration["WhatsApp:TemplateCode"] ?? "LOW_QUANTITY_PRODUCT";
+        var profileUser = await GetProfileUserAsync(cancellationToken);
+        if (profileUser is null)
+        {
+            _logger.LogWarning("No profile user with WhatsApp configuration found. Low-stock alert skipped.");
+            return;
+        }
+
+        var recipientPhone = profileUser.Mobile;
+        var apiKey = profileUser.WhatsAppApiKey ?? _configuration["WhatsApp:ApiKey"];
+        var profileTemplates = DeserializeTemplates(profileUser.WhatsAppTemplatesJson);
+        var templateCode = profileTemplates.FirstOrDefault(t => !string.IsNullOrWhiteSpace(t))
+            ?? _configuration["LowStockAlert:TemplateCode"]
+            ?? _configuration["WhatsApp:TemplateCode"]
+            ?? "LOW_QUANTITY_PRODUCT";
 
         if (string.IsNullOrWhiteSpace(recipientPhone))
         {
@@ -93,7 +102,7 @@ public class LowStockWhatsAppAlertService : BackgroundService
             return;
         }
 
-        var ownerName = profileSettings.BasicDetails?.OwnerName;
+        var ownerName = profileUser.OwnerName;
         var productSummary = string.Join(", ", products.Select(p => $"{p.Name} ({p.StockQuantity})"));
 
         var payload = new Dictionary<string, object?>
@@ -139,52 +148,34 @@ public class LowStockWhatsAppAlertService : BackgroundService
         }
     }
 
-    private async Task<ProfileSettingsSnapshot> LoadProfileSettingsAsync(CancellationToken cancellationToken)
+    private async Task<User?> GetProfileUserAsync(CancellationToken cancellationToken)
     {
-        var settingsPath = Path.Combine(_environment.ContentRootPath, "Data", "profile-settings.json");
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MedshopDbContext>();
 
-        if (!System.IO.File.Exists(settingsPath))
+        var user = await dbContext.Users
+            .Where(u => !string.IsNullOrWhiteSpace(u.WhatsAppApiKey) || !string.IsNullOrWhiteSpace(u.WhatsAppTemplatesJson))
+            .OrderByDescending(u => u.UpdatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return user;
+    }
+
+    private static List<string> DeserializeTemplates(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
         {
-            return new ProfileSettingsSnapshot();
+            return new List<string>();
         }
 
         try
         {
-            var json = await System.IO.File.ReadAllTextAsync(settingsPath, cancellationToken);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return new ProfileSettingsSnapshot();
-            }
-
-            var profile = JsonSerializer.Deserialize<ProfileSettingsSnapshot>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-
-            return profile ?? new ProfileSettingsSnapshot();
+            var templates = JsonSerializer.Deserialize<List<string>>(json);
+            return templates ?? new List<string>();
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogWarning(ex, "Could not read profile settings file at {SettingsPath}.", settingsPath);
-            return new ProfileSettingsSnapshot();
+            return new List<string>();
         }
-    }
-
-    private sealed class ProfileSettingsSnapshot
-    {
-        public BasicProfileDetailsSnapshot? BasicDetails { get; set; }
-        public WhatsAppSettingsSnapshot? WhatsApp { get; set; }
-    }
-
-    private sealed class BasicProfileDetailsSnapshot
-    {
-        public string? OwnerName { get; set; }
-        public string? Phone { get; set; }
-    }
-
-    private sealed class WhatsAppSettingsSnapshot
-    {
-        public string? ApiKey { get; set; }
-        public List<string> Templates { get; set; } = new();
     }
 }

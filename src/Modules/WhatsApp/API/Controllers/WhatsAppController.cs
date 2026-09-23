@@ -1,12 +1,15 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Medshop.BuildingBlocks.Common;
+using Medshop.Modules.Identity.Domain.Entities;
+using Medshop.Modules.Identity.Infrastructure.JWT;
+using Medshop.Modules.Identity.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using Microsoft.EntityFrameworkCore;
 
 namespace Medshop.Modules.WhatsApp.API.Controllers;
 
@@ -17,8 +20,7 @@ public class WhatsAppController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WhatsAppController> _logger;
-    private readonly IWebHostEnvironment _environment;
-    private readonly string _settingsFilePath;
+    private readonly MedshopDbContext _dbContext;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -30,16 +32,11 @@ public class WhatsAppController : ControllerBase
     public WhatsAppController(
         IHttpClientFactory httpClientFactory,
         ILogger<WhatsAppController> logger,
-        IWebHostEnvironment environment)
+        MedshopDbContext dbContext)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
-        _environment = environment;
-
-        var dataDirectory = Path.Combine(_environment.ContentRootPath, "Data");
-        Directory.CreateDirectory(dataDirectory);
-
-        _settingsFilePath = Path.Combine(dataDirectory, "profile-settings.json");
+        _dbContext = dbContext;
     }
 
     [HttpPost("send-template")]
@@ -52,7 +49,7 @@ public class WhatsAppController : ControllerBase
             return BadRequest(ApiResponse<object>.FailureResult("Recipient phone is required."));
         }
 
-        var profile = await LoadProfileSettingsAsync(cancellationToken);
+        var profile = await LoadProfileSettingsAsync(request.UserId, cancellationToken);
         var apiKey = profile.WhatsApp?.ApiKey;
 
         var templateCode = profile.WhatsApp?.Templates?
@@ -79,18 +76,11 @@ public class WhatsAppController : ControllerBase
         }
 
         var mediaUrl = request.MediaUrl;
-        string? generatedFileName = null;
 
-        if (string.IsNullOrWhiteSpace(mediaUrl))
+        if (string.IsNullOrWhiteSpace(mediaUrl) || !Uri.TryCreate(mediaUrl, UriKind.Absolute, out var mediaUri) ||
+            (!mediaUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) && !mediaUri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)))
         {
-            var generatedPdf = await CreateInvoicePdfAsync(request, profile, cancellationToken);
-            generatedFileName = Path.GetFileName(generatedPdf.FilePath);
-            mediaUrl = ResolvePublicMediaUrl(profile, generatedFileName);
-
-            if (string.IsNullOrWhiteSpace(mediaUrl))
-            {
-                return BadRequest(ApiResponse<object>.FailureResult("A public media_url is required for WhatsApp PDF attachments. Use the full public base URL, not localhost."));
-            }
+            return BadRequest(ApiResponse<object>.FailureResult("media_url is required and must be a full public URL like https://example.com/invoice.pdf."));
         }
 
         var variables = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -183,115 +173,87 @@ public class WhatsAppController : ControllerBase
         return Ok(ApiResponse<object>.SuccessResult(new { message = responseBody, media_url = mediaUrl }, "WhatsApp template sent successfully"));
     }
 
-    private async Task<(string MediaUrl, string FilePath)> CreateInvoicePdfAsync(SendWhatsAppTemplateRequest request, ProfileSettingsDto profile, CancellationToken cancellationToken)
+
+    private async Task<ProfileSettingsDto> LoadProfileSettingsAsync(Guid? userId, CancellationToken cancellationToken)
     {
-        var reportDirectory = Path.Combine(_environment.ContentRootPath, "Report");
-        Directory.CreateDirectory(reportDirectory);
-
-        var invoiceNumber = string.IsNullOrWhiteSpace(request.TemplateName)
-            ? $"INV-{DateTime.UtcNow:yyyyMMddHHmmss}"
-            : request.TemplateName;
-
-        var safeTitle = string.Concat(invoiceNumber.Where(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '_'));
-        var fileName = $"{DateTime.UtcNow:yyyyMMddHHmmssfff}_{(string.IsNullOrWhiteSpace(safeTitle) ? "invoice" : safeTitle)}.pdf";
-        var filePath = Path.Combine(reportDirectory, fileName);
-
-        var document = new PdfDocument();
-        var page = document.AddPage();
-        var gfx = XGraphics.FromPdfPage(page);
-        var titleFont = new XFont("Arial", 18, XFontStyle.Bold);
-        var regularFont = new XFont("Arial", 11, XFontStyle.Regular);
-        var y = 40d;
-        gfx.DrawString("Medshop Invoice", titleFont, XBrushes.Black, new XRect(40, y, page.Width - 80, 25), XStringFormats.TopLeft);
-        y += 30;
-
-        var lines = new List<string>
-        {
-            $"Template: {request.TemplateName}",
-            $"Recipient: {request.RecipientPhone}",
-            $"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC"
-        };
-
-        if (request.Variables is not null)
-        {
-            foreach (var pair in request.Variables)
-            {
-                var value = pair.Value switch
-                {
-                    null => "N/A",
-                    string s => s,
-                    _ => pair.Value.ToString()
-                };
-
-                lines.Add($"{pair.Key}: {value}");
-            }
-        }
-
-        foreach (var line in lines)
-        {
-            gfx.DrawString(line, regularFont, XBrushes.Black, new XRect(40, y, page.Width - 80, 20), XStringFormats.TopLeft);
-            y += 18;
-        }
-
-        document.Save(filePath);
-        document.Close();
-
-        var mediaUrl = ResolvePublicMediaUrl(profile, fileName);
-        await Task.CompletedTask;
-        return (mediaUrl ?? string.Empty, filePath);
-    }
-
-    private string? ResolvePublicMediaUrl(ProfileSettingsDto? profile, string fileName)
-    {
-        var configuredBase = profile?.WhatsApp?.PublicMediaBaseUrl;
-        if (!string.IsNullOrWhiteSpace(configuredBase))
-        {
-            if (configuredBase.Contains("localhost", StringComparison.OrdinalIgnoreCase) ||
-                configuredBase.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            var trimmedBase = configuredBase.TrimEnd('/');
-            if (trimmedBase.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-            {
-                return trimmedBase;
-            }
-
-            var filePath = Path.GetFileName(fileName);
-            return $"{trimmedBase}/{filePath}";
-        }
-
-        return null;
-    }
-
-    private async Task<ProfileSettingsDto> LoadProfileSettingsAsync(CancellationToken cancellationToken)
-    {
-        if (!System.IO.File.Exists(_settingsFilePath))
+        var currentUser = await GetCurrentUserAsync(userId, cancellationToken);
+        if (currentUser is null)
         {
             return new ProfileSettingsDto();
         }
 
-        var json = await System.IO.File.ReadAllTextAsync(_settingsFilePath, cancellationToken);
+        return MapUserToProfile(currentUser);
+    }
+
+    private async Task<User?> GetCurrentUserAsync(Guid? explicitUserId, CancellationToken cancellationToken)
+    {
+        if (explicitUserId.HasValue)
+        {
+            var userById = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == explicitUserId.Value, cancellationToken);
+            if (userById is not null)
+            {
+                return userById;
+            }
+        }
+
+        var loginIdValue = User.FindFirstValue(JwtClaimTypes.LoginId);
+        if (Guid.TryParse(loginIdValue, out var loginId))
+        {
+            var userByLoginId = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == loginId, cancellationToken);
+            if (userByLoginId is not null)
+            {
+                return userByLoginId;
+            }
+        }
+
+        var email = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            return await _dbContext.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower(), cancellationToken);
+        }
+
+        return await _dbContext.Users.FirstOrDefaultAsync(u => !string.IsNullOrWhiteSpace(u.WhatsAppApiKey), cancellationToken);
+    }
+
+    private static ProfileSettingsDto MapUserToProfile(User user)
+    {
+        var templates = DeserializeTemplates(user.WhatsAppTemplatesJson);
+
+        return new ProfileSettingsDto
+        {
+            WhatsApp = new WhatsAppProfileSettingsDto
+            {
+                BaseUrl = string.IsNullOrWhiteSpace(user.WhatsAppBaseUrl) ? "https://sahilmoney.in/WapHubBackend" : user.WhatsAppBaseUrl,
+                ApiKey = user.WhatsAppApiKey,
+                Templates = templates
+            }
+        };
+    }
+
+    private static List<string> DeserializeTemplates(string? json)
+    {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return new ProfileSettingsDto();
+            return new List<string>();
         }
 
         try
         {
-            var profile = JsonSerializer.Deserialize<ProfileSettingsDto>(json, JsonOptions);
-            return profile ?? new ProfileSettingsDto();
+            var templates = JsonSerializer.Deserialize<List<string>>(json, JsonOptions);
+            return templates ?? new List<string>();
         }
         catch
         {
-            return new ProfileSettingsDto();
+            return new List<string>();
         }
     }
 }
 
 public class SendWhatsAppTemplateRequest
 {
+    [JsonPropertyName("user_id")]
+    public Guid? UserId { get; set; }
+
     [JsonPropertyName("template_name")]
     public string TemplateName { get; set; } = string.Empty;
 
@@ -314,6 +276,5 @@ public class WhatsAppProfileSettingsDto
 {
     public string? BaseUrl { get; set; } = "https://sahilmoney.in/WapHubBackend";
     public string? ApiKey { get; set; }
-    public string? PublicMediaBaseUrl { get; set; }
     public List<string> Templates { get; set; } = new();
 }

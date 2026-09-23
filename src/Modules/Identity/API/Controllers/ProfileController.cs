@@ -1,7 +1,12 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Medshop.BuildingBlocks.Common;
+using Medshop.Modules.Identity.Domain.Entities;
+using Medshop.Modules.Identity.Infrastructure.JWT;
+using Medshop.Modules.Identity.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Medshop.Modules.Identity.API.Controllers;
 
@@ -10,8 +15,7 @@ namespace Medshop.Modules.Identity.API.Controllers;
 [Route("api/[controller]")]
 public class ProfileController : ControllerBase
 {
-    private readonly IWebHostEnvironment _environment;
-    private readonly string _settingsFilePath;
+    private readonly MedshopDbContext _dbContext;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,84 +23,90 @@ public class ProfileController : ControllerBase
         WriteIndented = true
     };
 
-    public ProfileController(IWebHostEnvironment environment)
+    public ProfileController(MedshopDbContext dbContext)
     {
-        _environment = environment;
-
-        var dataDirectory = Path.Combine(_environment.ContentRootPath, "Data");
-        Directory.CreateDirectory(dataDirectory);
-
-        _settingsFilePath = Path.Combine(dataDirectory, "profile-settings.json");
+        _dbContext = dbContext;
     }
 
     [HttpGet]
     public async Task<ActionResult<ApiResponse<ProfileSettingsDto>>> GetProfileDetails(CancellationToken cancellationToken)
     {
-        var profile = await LoadSettingsAsync(cancellationToken);
+        var user = await GetCurrentUserAsync(cancellationToken);
+        if (user is null)
+        {
+            return Ok(ApiResponse<ProfileSettingsDto>.SuccessResult(new ProfileSettingsDto(), "Profile details fetched successfully"));
+        }
+
+        var profile = MapUserToProfile(user);
         return Ok(ApiResponse<ProfileSettingsDto>.SuccessResult(profile, "Profile details fetched successfully"));
     }
 
     [HttpPut]
     public async Task<ActionResult<ApiResponse<ProfileSettingsDto>>> UpdateProfile([FromBody] UpdateProfileSettingsRequest request, CancellationToken cancellationToken)
     {
-        var profile = await LoadSettingsAsync(cancellationToken);
+        var user = await GetCurrentUserAsync(cancellationToken);
+        if (user is null)
+        {
+            return Unauthorized(ApiResponse<ProfileSettingsDto>.FailureResult("User not found."));
+        }
 
         if (request.BasicDetails is not null)
         {
-            profile.BasicDetails ??= new BasicProfileDetailsDto();
-
-            profile.BasicDetails.BusinessName = !string.IsNullOrWhiteSpace(request.BasicDetails.BusinessName)
+            user.BusinessName = !string.IsNullOrWhiteSpace(request.BasicDetails.BusinessName)
                 ? request.BasicDetails.BusinessName
-                : profile.BasicDetails.BusinessName;
+                : user.BusinessName;
 
-            profile.BasicDetails.OwnerName = !string.IsNullOrWhiteSpace(request.BasicDetails.OwnerName)
+            user.OwnerName = !string.IsNullOrWhiteSpace(request.BasicDetails.OwnerName)
                 ? request.BasicDetails.OwnerName
-                : profile.BasicDetails.OwnerName;
+                : user.OwnerName;
 
-            profile.BasicDetails.Phone = !string.IsNullOrWhiteSpace(request.BasicDetails.Phone)
+            user.Mobile = !string.IsNullOrWhiteSpace(request.BasicDetails.Phone)
                 ? request.BasicDetails.Phone
-                : profile.BasicDetails.Phone;
+                : user.Mobile;
 
-            profile.BasicDetails.Email = !string.IsNullOrWhiteSpace(request.BasicDetails.Email)
+            user.Email = !string.IsNullOrWhiteSpace(request.BasicDetails.Email)
                 ? request.BasicDetails.Email
-                : profile.BasicDetails.Email;
+                : user.Email;
 
-            profile.BasicDetails.Address = !string.IsNullOrWhiteSpace(request.BasicDetails.Address)
+            user.Address = !string.IsNullOrWhiteSpace(request.BasicDetails.Address)
                 ? request.BasicDetails.Address
-                : profile.BasicDetails.Address;
+                : user.Address;
 
-            profile.BasicDetails.City = !string.IsNullOrWhiteSpace(request.BasicDetails.City)
+            user.City = !string.IsNullOrWhiteSpace(request.BasicDetails.City)
                 ? request.BasicDetails.City
-                : profile.BasicDetails.City;
+                : user.City;
 
-            profile.BasicDetails.State = !string.IsNullOrWhiteSpace(request.BasicDetails.State)
+            user.State = !string.IsNullOrWhiteSpace(request.BasicDetails.State)
                 ? request.BasicDetails.State
-                : profile.BasicDetails.State;
+                : user.State;
         }
 
         if (request.WhatsApp is not null)
         {
-            profile.WhatsApp ??= new WhatsAppSettingsDto();
-
-            profile.WhatsApp.BaseUrl = !string.IsNullOrWhiteSpace(request.WhatsApp.BaseUrl)
+            user.WhatsAppBaseUrl = !string.IsNullOrWhiteSpace(request.WhatsApp.BaseUrl)
                 ? request.WhatsApp.BaseUrl
-                : profile.WhatsApp.BaseUrl;
+                : user.WhatsAppBaseUrl;
 
-            profile.WhatsApp.ApiKey = !string.IsNullOrWhiteSpace(request.WhatsApp.ApiKey)
+            user.WhatsAppApiKey = !string.IsNullOrWhiteSpace(request.WhatsApp.ApiKey)
                 ? request.WhatsApp.ApiKey
-                : profile.WhatsApp.ApiKey;
+                : user.WhatsAppApiKey;
 
             if (request.WhatsApp.Templates is not null)
             {
-                profile.WhatsApp.Templates = request.WhatsApp.Templates
+                var templates = request.WhatsApp.Templates
                     .Where(t => !string.IsNullOrWhiteSpace(t))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+
+                user.WhatsAppTemplatesJson = JsonSerializer.Serialize(templates, JsonOptions);
             }
         }
 
-        await SaveSettingsAsync(profile, cancellationToken);
-        return Ok(ApiResponse<ProfileSettingsDto>.SuccessResult(profile, "Profile updated successfully"));
+        user.UpdatedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var updatedProfile = MapUserToProfile(user);
+        return Ok(ApiResponse<ProfileSettingsDto>.SuccessResult(updatedProfile, "Profile updated successfully"));
     }
 
     [HttpPut("whatsapp/templates")]
@@ -107,46 +117,86 @@ public class ProfileController : ControllerBase
             return BadRequest(ApiResponse<List<string>>.FailureResult("At least one WhatsApp template name is required."));
         }
 
-        var profile = await LoadSettingsAsync(cancellationToken);
-        profile.WhatsApp ??= new WhatsAppSettingsDto();
+        var user = await GetCurrentUserAsync(cancellationToken);
+        if (user is null)
+        {
+            return Unauthorized(ApiResponse<List<string>>.FailureResult("User not found."));
+        }
 
-        profile.WhatsApp.Templates = request.Templates
+        var templates = request.Templates
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        await SaveSettingsAsync(profile, cancellationToken);
-        return Ok(ApiResponse<List<string>>.SuccessResult(profile.WhatsApp.Templates, "WhatsApp templates updated successfully"));
+        user.WhatsAppTemplatesJson = JsonSerializer.Serialize(templates, JsonOptions);
+        user.UpdatedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(ApiResponse<List<string>>.SuccessResult(templates, "WhatsApp templates updated successfully"));
     }
 
-    private async Task<ProfileSettingsDto> LoadSettingsAsync(CancellationToken cancellationToken)
+    private async Task<User?> GetCurrentUserAsync(CancellationToken cancellationToken)
     {
-        if (!System.IO.File.Exists(_settingsFilePath))
+        var loginIdValue = User.FindFirstValue(JwtClaimTypes.LoginId);
+        if (Guid.TryParse(loginIdValue, out var loginId))
         {
-            return new ProfileSettingsDto();
+            var userById = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == loginId, cancellationToken);
+            if (userById is not null)
+            {
+                return userById;
+            }
         }
 
-        var json = await System.IO.File.ReadAllTextAsync(_settingsFilePath, cancellationToken);
+        var email = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            return await _dbContext.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower(), cancellationToken);
+        }
+
+        return null;
+    }
+
+    private static ProfileSettingsDto MapUserToProfile(User user)
+    {
+        var templates = DeserializeTemplates(user.WhatsAppTemplatesJson);
+
+        return new ProfileSettingsDto
+        {
+            BasicDetails = new BasicProfileDetailsDto
+            {
+                BusinessName = user.BusinessName,
+                OwnerName = user.OwnerName,
+                Phone = user.Mobile,
+                Email = user.Email,
+                Address = user.Address,
+                City = user.City,
+                State = user.State
+            },
+            WhatsApp = new WhatsAppSettingsDto
+            {
+                BaseUrl = string.IsNullOrWhiteSpace(user.WhatsAppBaseUrl) ? "https://sahilmoney.in/WapHubBackend" : user.WhatsAppBaseUrl,
+                ApiKey = user.WhatsAppApiKey,
+                Templates = templates
+            }
+        };
+    }
+
+    private static List<string> DeserializeTemplates(string? json)
+    {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return new ProfileSettingsDto();
+            return new List<string>();
         }
 
         try
         {
-            var profile = JsonSerializer.Deserialize<ProfileSettingsDto>(json, JsonOptions);
-            return profile ?? new ProfileSettingsDto();
+            var templates = JsonSerializer.Deserialize<List<string>>(json, JsonOptions);
+            return templates ?? new List<string>();
         }
         catch
         {
-            return new ProfileSettingsDto();
+            return new List<string>();
         }
-    }
-
-    private async Task SaveSettingsAsync(ProfileSettingsDto profile, CancellationToken cancellationToken)
-    {
-        var json = JsonSerializer.Serialize(profile, JsonOptions);
-        await System.IO.File.WriteAllTextAsync(_settingsFilePath, json, cancellationToken);
     }
 }
 

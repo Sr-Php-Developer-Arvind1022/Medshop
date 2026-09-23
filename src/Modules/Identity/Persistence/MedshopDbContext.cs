@@ -30,6 +30,11 @@ public class MedshopDbContext : DbContext
             entity.Property(e => e.Email).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Mobile).IsRequired().HasMaxLength(20);
             entity.Property(e => e.PasswordHash).IsRequired();
+            entity.Property(e => e.BusinessName).HasMaxLength(200);
+            entity.Property(e => e.OwnerName).HasMaxLength(200);
+            entity.Property(e => e.WhatsAppBaseUrl).HasMaxLength(500);
+            entity.Property(e => e.WhatsAppApiKey).HasMaxLength(500);
+            entity.Property(e => e.WhatsAppTemplatesJson).HasColumnType("text");
             entity.Property(e => e.IsActive);
             entity.HasIndex(e => e.Id);
         });

@@ -15,6 +15,11 @@ public class User
     public string? State { get; set; }
     public string? Country { get; set; }
     public string? Pincode { get; set; }
+    public string? BusinessName { get; set; }
+    public string? OwnerName { get; set; }
+    public string? WhatsAppBaseUrl { get; set; }
+    public string? WhatsAppApiKey { get; set; }
+    public string? WhatsAppTemplatesJson { get; set; }
     public string? ProfileImage { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -245,8 +245,9 @@ try
         options.RoutePrefix = "swagger";
     });
 
-    var reportDirectory = Path.Combine(builder.Environment.ContentRootPath, "Report");
+    var reportDirectory = Path.Combine(AppContext.BaseDirectory, "Report");
     Directory.CreateDirectory(reportDirectory);
+    Console.WriteLine($"Report directory: {reportDirectory}");
 
     app.UseStaticFiles();
     app.UseStaticFiles(new StaticFileOptions
