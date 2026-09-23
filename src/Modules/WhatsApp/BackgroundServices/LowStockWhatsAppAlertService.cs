@@ -104,7 +104,7 @@ public class LowStockWhatsAppAlertService : BackgroundService
 
         var ownerName = profileUser.OwnerName;
         var productSummary = string.Join(", ", products.Select(p => $"{p.Name} ({p.StockQuantity})"));
-        var totalLowStockUnits = products.Sum(p => p.StockQuantity);
+        var totalLowStockQuantity = products.Sum(p => p.StockQuantity);
 
         var payload = new Dictionary<string, object?>
         {
@@ -114,7 +114,9 @@ public class LowStockWhatsAppAlertService : BackgroundService
             {
                 ["name"] = !string.IsNullOrWhiteSpace(ownerName) ? ownerName : "Customer",
                 ["items"] = productSummary,
-                ["amount"] = totalLowStockUnits.ToString(),
+                ["products"] = productSummary,
+                ["count"] = products.Count.ToString(),
+                ["amount"] = totalLowStockQuantity.ToString(),
                 ["date"] = DateTime.UtcNow.ToString("dd-MM-yyyy")
             }
         };
