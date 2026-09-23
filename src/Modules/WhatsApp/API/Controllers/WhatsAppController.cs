@@ -75,12 +75,20 @@ public class WhatsAppController : ControllerBase
             client.BaseAddress = new Uri(savedBaseUrl.TrimEnd('/') + "/");
         }
 
+        // media_url is optional for now — left blank unless explicitly provided and valid.
         var mediaUrl = request.MediaUrl;
 
-        if (string.IsNullOrWhiteSpace(mediaUrl) || !Uri.TryCreate(mediaUrl, UriKind.Absolute, out var mediaUri) ||
-            (!mediaUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) && !mediaUri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)))
+        if (!string.IsNullOrWhiteSpace(mediaUrl))
         {
-            return BadRequest(ApiResponse<object>.FailureResult("media_url is required and must be a full public URL like https://example.com/invoice.pdf."));
+            if (!Uri.TryCreate(mediaUrl, UriKind.Absolute, out var mediaUri) ||
+                (!mediaUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) && !mediaUri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)))
+            {
+                return BadRequest(ApiResponse<object>.FailureResult("media_url must be a full public URL like https://example.com/invoice.pdf."));
+            }
+        }
+        else
+        {
+            mediaUrl = null;
         }
 
         var variables = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -264,7 +272,7 @@ public class SendWhatsAppTemplateRequest
     public Dictionary<string, object>? Variables { get; set; } = new();
 
     [JsonPropertyName("media_url")]
-    public string? MediaUrl { get; set; }
+    public string? MediaUrl { get; set; } = string.Empty;
 }
 
 public class ProfileSettingsDto
