@@ -21,6 +21,7 @@ public class WhatsAppController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WhatsAppController> _logger;
     private readonly MedshopDbContext _dbContext;
+    private readonly IWebHostEnvironment _webHostEnvironment;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -32,11 +33,13 @@ public class WhatsAppController : ControllerBase
     public WhatsAppController(
         IHttpClientFactory httpClientFactory,
         ILogger<WhatsAppController> logger,
-        MedshopDbContext dbContext)
+        MedshopDbContext dbContext,
+        IWebHostEnvironment webHostEnvironment)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _dbContext = dbContext;
+        _webHostEnvironment = webHostEnvironment;
     }
 
     [HttpPost("send-template")]
@@ -178,7 +181,73 @@ public class WhatsAppController : ControllerBase
                     }));
         }
 
+        TryDeleteLocalMediaFile(mediaUrl);
+
         return Ok(ApiResponse<object>.SuccessResult(new { message = responseBody, media_url = mediaUrl }, "WhatsApp template sent successfully"));
+    }
+
+    private void TryDeleteLocalMediaFile(string? mediaUrl)
+    {
+        if (string.IsNullOrWhiteSpace(mediaUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!Uri.TryCreate(mediaUrl, UriKind.Absolute, out var uri))
+            {
+                return;
+            }
+
+            var fileName = Path.GetFileName(uri.AbsolutePath);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                _logger.LogWarning("Skipped media file cleanup: could not extract file name from {MediaUrl}", mediaUrl);
+                return;
+            }
+
+            var contentRoot = _webHostEnvironment.ContentRootPath;
+            if (string.IsNullOrWhiteSpace(contentRoot) || !Directory.Exists(contentRoot))
+            {
+                _logger.LogWarning("Skipped media file cleanup: ContentRootPath is not available.");
+                return;
+            }
+
+            // Look for the file under any "Uploads" (or "uploads") folder anywhere under the content root.
+            // This covers module-local wwwroot/Uploads folders (e.g. Modules/WhatsApp/wwwroot/Uploads/Products,
+            // .../Profile) without needing to know the exact static-file mapping.
+            var uploadsDirs = Directory.EnumerateDirectories(contentRoot, "Uploads", SearchOption.AllDirectories)
+                .Concat(Directory.EnumerateDirectories(contentRoot, "uploads", SearchOption.AllDirectories))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            string? matchedPath = null;
+
+            foreach (var dir in uploadsDirs)
+            {
+                var candidates = Directory.EnumerateFiles(dir, fileName, SearchOption.AllDirectories);
+                var found = candidates.FirstOrDefault();
+                if (found is not null)
+                {
+                    matchedPath = found;
+                    break;
+                }
+            }
+
+            if (matchedPath is null)
+            {
+                _logger.LogInformation("Media file cleanup skipped: no file named {FileName} found under any Uploads folder in {ContentRoot}", fileName, contentRoot);
+                return;
+            }
+
+            System.IO.File.Delete(matchedPath);
+            _logger.LogInformation("Deleted media file after successful send: {Path}", matchedPath);
+        }
+        catch (Exception ex)
+        {
+            // Don't fail the request if cleanup fails — the WhatsApp message already went out.
+            _logger.LogWarning(ex, "Failed to delete media file after send: {MediaUrl}", mediaUrl);
+        }
     }
 
 
