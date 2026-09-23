@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using FluentValidation;
 using Medshop.BuildingBlocks.Infrastructure.Middleware;
 using Medshop.Modules.Categories.Application.DTOs.Request;
@@ -33,6 +34,7 @@ using Medshop.Modules.Sales.Application.Services;
 using Medshop.Modules.Sales.Application.Validators;
 using Medshop.Modules.Sales.Domain.Interfaces;
 using Medshop.Modules.Sales.Infrastructure.Repositories;
+using Medshop.Modules.WhatsApp.BackgroundServices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi.Models;
@@ -91,6 +93,13 @@ try
                 .AllowAnyHeader()
                 .AllowAnyMethod();
         });
+    });
+
+    builder.Services.AddHttpClient("WapHub", client =>
+    {
+        var baseUrl = builder.Configuration["WhatsApp:BaseUrl"] ?? "https://sahilmoney.in/WapHubBackend";
+        client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     });
 
     builder.Services.AddEndpointsApiExplorer();
@@ -208,6 +217,7 @@ try
     builder.Services.AddScoped<TokenService>();
 
     builder.Services.AddJwtAuthentication(builder.Configuration);
+    builder.Services.AddHostedService<LowStockWhatsAppAlertService>();
 
     Console.WriteLine("Services Registered");
 
@@ -233,6 +243,13 @@ try
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "Medshop API v1");
         options.RoutePrefix = "swagger";
+    });
+
+    app.UseStaticFiles();
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "Report")),
+        RequestPath = "/Reports"
     });
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();

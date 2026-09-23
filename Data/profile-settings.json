@@ -1,0 +1,19 @@
+{
+  "basicDetails": {
+    "businessName": "Medshop",
+    "ownerName": "Test User",
+    "phone": "9967671647",
+    "email": "testuser@example.com",
+    "address": "Main Street",
+    "city": "Pune",
+    "state": "MH"
+  },
+  "whatsApp": {
+    "baseUrl": "https://sahilmoney.in/WapHubBackend",
+    "apiKey": "wasaas_live_gU4Y1vyf52fCx8VCV6jJi35DYfMVgtf0IrdJodVJ",
+    "templates": [
+      "CUSTOMER_PURCHASE",
+      "CUSTOMER_PURCHASE1"
+    ]
+  }
+}
