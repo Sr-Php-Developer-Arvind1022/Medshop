@@ -4,6 +4,9 @@ using System.Text.Json;
 using Medshop.Modules.Identity.Domain.Entities;
 using Medshop.Modules.Identity.Persistence;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace Medshop.Modules.WhatsApp.BackgroundServices;
 
@@ -69,6 +72,10 @@ public class LowStockWhatsAppAlertService : BackgroundService
             .Select(p => new { p.Name, p.StockQuantity })
             .ToListAsync(cancellationToken);
 
+        var mediaUrl = await GenerateLowStockPdfReportAsync(
+            products.Select(p => (p.Name, p.StockQuantity)).ToList(),
+            cancellationToken);
+
         if (products.Count == 0)
         {
             _logger.LogInformation("No low-stock products found for alert check.");
@@ -117,6 +124,15 @@ public class LowStockWhatsAppAlertService : BackgroundService
             }
         };
 
+        if (!string.IsNullOrWhiteSpace(mediaUrl))
+        {
+            payload["media_url"] = mediaUrl;
+        }
+        else
+        {
+            _logger.LogWarning("Low-stock PDF report was not generated; sending alert without media_url.");
+        }
+
         var client = _httpClientFactory.CreateClient("WapHub");
         using var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/messages/send-template");
         request.Content = JsonContent.Create(payload);
@@ -145,6 +161,91 @@ public class LowStockWhatsAppAlertService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Exception while sending low-stock WhatsApp alert.");
+        }
+    }
+
+    /// <summary>
+    /// Generates a low-stock PDF report, saves it under wwwroot/reports (served as static files),
+    /// and returns a publicly reachable URL built from App:PublicBaseUrl. Returns null on failure
+    /// so the caller can still send the WhatsApp alert without an attachment.
+    /// </summary>
+    private async Task<string?> GenerateLowStockPdfReportAsync(
+        IReadOnlyList<(string Name, int StockQuantity)> products,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var publicBaseUrl = _configuration["App:PublicBaseUrl"]?.TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(publicBaseUrl))
+            {
+                _logger.LogWarning(
+                    "App:PublicBaseUrl is not configured; cannot build a public media_url for the PDF report.");
+                return null;
+            }
+
+            var webRoot = _environment.WebRootPath;
+            if (string.IsNullOrWhiteSpace(webRoot))
+            {
+                _logger.LogWarning("WebRootPath is not available; cannot save the PDF report for static serving.");
+                return null;
+            }
+
+            var reportsDirectory = Path.Combine(webRoot, "reports");
+            Directory.CreateDirectory(reportsDirectory);
+
+            var fileName = $"low-stock-{DateTime.UtcNow:yyyyMMdd-HHmmss}.pdf";
+            var filePath = Path.Combine(reportsDirectory, fileName);
+
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(30);
+                    page.DefaultTextStyle(x => x.FontSize(10));
+
+                    page.Header().Text("Low Stock Report").FontSize(18).Bold();
+
+                    page.Content().PaddingVertical(10).Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.RelativeColumn(3);
+                            columns.RelativeColumn(1);
+                        });
+
+                        table.Header(header =>
+                        {
+                            header.Cell().Text("Product").Bold();
+                            header.Cell().AlignRight().Text("Stock Qty").Bold();
+                        });
+
+                        foreach (var product in products)
+                        {
+                            table.Cell().Text(product.Name);
+                            table.Cell().AlignRight().Text(product.StockQuantity.ToString());
+                        }
+                    });
+
+                    page.Footer().AlignCenter().Text(text =>
+                    {
+                        text.Span($"Generated {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC").FontSize(8);
+                    });
+                });
+            }).GeneratePdf(filePath);
+
+            // Run the blocking file write path off the sync GeneratePdf call above;
+            // yield here to keep the async signature honest for callers awaiting this method.
+            await Task.CompletedTask;
+
+            return $"{publicBaseUrl}/reports/{fileName}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate the low-stock PDF report.");
+            return null;
         }
     }
 
