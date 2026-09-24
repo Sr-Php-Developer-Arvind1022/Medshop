@@ -109,19 +109,30 @@ public class LowStockWhatsAppAlertService : BackgroundService
             return;
         }
 
-        var ownerName = profileUser.OwnerName;
         var productSummary = BuildTruncatedProductSummary(products.Select(p => p.Name), maxLength: 120);
+
+        // The WapHub template requires "items", "amount" and "date". When a PDF report is attached
+        // via media_url, the real product breakdown lives in the PDF, so we send dummy placeholders
+        // here instead of the actual summary/count.
+        var variables = !string.IsNullOrWhiteSpace(mediaUrl)
+            ? new Dictionary<string, object>
+            {
+                ["items"] = "Test",
+                ["amount"] = "0",
+                ["date"] = DateTime.UtcNow.ToString("yyyy-MM-dd")
+            }
+            : new Dictionary<string, object>
+            {
+                ["items"] = productSummary,
+                ["amount"] = products.Count.ToString(),
+                ["date"] = DateTime.UtcNow.ToString("yyyy-MM-dd")
+            };
 
         var payload = new Dictionary<string, object?>
         {
             ["recipient_phone"] = recipientPhone,
             ["template_code"] = templateCode,
-            ["variables"] = new Dictionary<string, object>
-            {
-                ["name"] = !string.IsNullOrWhiteSpace(ownerName) ? ownerName : "Customer",
-                ["products"] = productSummary,
-                ["count"] = products.Count.ToString()
-            }
+            ["variables"] = variables
         };
 
         if (!string.IsNullOrWhiteSpace(mediaUrl))
