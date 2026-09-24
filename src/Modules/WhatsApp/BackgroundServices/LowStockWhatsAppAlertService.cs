@@ -1,11 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using Medshop.Modules.Identity.Domain.Entities;
 using Medshop.Modules.Identity.Persistence;
 using Microsoft.EntityFrameworkCore;
-using QuestPDF.Fluent;
-using QuestPDF.Helpers;
-using QuestPDF.Infrastructure;
 
 namespace Medshop.Modules.WhatsApp.BackgroundServices;
 
@@ -209,6 +207,10 @@ public class LowStockWhatsAppAlertService : BackgroundService
     /// Generates a low-stock PDF report, saves it under wwwroot/reports (served as static files),
     /// and returns a publicly reachable URL built from App:PublicBaseUrl. Returns null on failure
     /// so the caller can still send the WhatsApp alert without an attachment.
+    ///
+    /// The PDF is hand-built as raw PDF syntax using only the built-in "Helvetica" standard font
+    /// (one of the 14 fonts every PDF reader already supports natively). This means no font files,
+    /// no NuGet PDF library, and no dependency on fonts being installed in the deployment container.
     /// </summary>
     private async Task<string?> GenerateLowStockPdfReportAsync(
         IReadOnlyList<(string Name, int StockQuantity)> products,
@@ -239,49 +241,8 @@ public class LowStockWhatsAppAlertService : BackgroundService
             var fileName = $"low-stock-{DateTime.UtcNow:yyyyMMdd-HHmmss}{userSuffix}.pdf";
             var filePath = Path.Combine(reportsDirectory, fileName);
 
-            QuestPDF.Settings.License = LicenseType.Community;
-
-            Document.Create(container =>
-            {
-                container.Page(page =>
-                {
-                    page.Size(PageSizes.A4);
-                    page.Margin(30);
-                    page.DefaultTextStyle(x => x.FontSize(10));
-
-                    page.Header().Text("Low Stock Report").FontSize(18).Bold();
-
-                    page.Content().PaddingVertical(10).Table(table =>
-                    {
-                        table.ColumnsDefinition(columns =>
-                        {
-                            columns.RelativeColumn(3);
-                            columns.RelativeColumn(1);
-                        });
-
-                        table.Header(header =>
-                        {
-                            header.Cell().Text("Product").Bold();
-                            header.Cell().AlignRight().Text("Stock Qty").Bold();
-                        });
-
-                        foreach (var product in products)
-                        {
-                            table.Cell().Text(product.Name);
-                            table.Cell().AlignRight().Text(product.StockQuantity.ToString());
-                        }
-                    });
-
-                    page.Footer().AlignCenter().Text(text =>
-                    {
-                        text.Span($"Generated {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC").FontSize(8);
-                    });
-                });
-            }).GeneratePdf(filePath);
-
-            // Run the blocking file write path off the sync GeneratePdf call above;
-            // yield here to keep the async signature honest for callers awaiting this method.
-            await Task.CompletedTask;
+            var pdfBytes = BuildLowStockPdf(products, DateTime.UtcNow);
+            await File.WriteAllBytesAsync(filePath, pdfBytes, cancellationToken);
 
             var reportUrl = $"{publicBaseUrl}/reports/{fileName}";
             _logger.LogInformation("Low-stock PDF report generated: {ReportUrl}", reportUrl);
@@ -294,6 +255,132 @@ public class LowStockWhatsAppAlertService : BackgroundService
             return null;
         }
     }
+
+    /// <summary>
+    /// Builds a minimal, valid, multi-page PDF document from scratch as raw bytes, using only the
+    /// standard "Helvetica" font (no embedding required). Good enough for a plain text/tabular
+    /// report; not a general-purpose PDF engine.
+    /// </summary>
+    private static byte[] BuildLowStockPdf(IReadOnlyList<(string Name, int StockQuantity)> products, DateTime generatedAtUtc)
+    {
+        const int pageWidth = 595;   // A4 width in points
+        const int pageHeight = 842;  // A4 height in points
+        const int marginLeft = 40;
+        const int topY = 800;
+        const int lineHeight = 16;
+        const int linesPerPage = 45;
+
+        var lines = new List<string>
+        {
+            "Low Stock Report",
+            $"Generated: {generatedAtUtc:yyyy-MM-dd HH:mm} UTC",
+            string.Empty,
+            $"{"Product",-45}{"Stock Qty"}",
+            new string('-', 60)
+        };
+
+        foreach (var product in products)
+        {
+            var name = product.Name.Length > 42 ? product.Name[..42] : product.Name;
+            lines.Add($"{name,-45}{product.StockQuantity}");
+        }
+
+        var pages = new List<List<string>>();
+        for (var i = 0; i < lines.Count; i += linesPerPage)
+        {
+            pages.Add(lines.Skip(i).Take(linesPerPage).ToList());
+        }
+
+        if (pages.Count == 0)
+        {
+            pages.Add(new List<string> { "Low Stock Report" });
+        }
+
+        var buffer = new List<byte>();
+        var offsets = new List<int>();
+
+        void WriteRaw(string text) => buffer.AddRange(Encoding.Latin1.GetBytes(text));
+
+        void StartObject(int number)
+        {
+            offsets.Add(buffer.Count);
+            WriteRaw($"{number} 0 obj\n");
+        }
+
+        void EndObject() => WriteRaw("endobj\n");
+
+        WriteRaw("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
+
+        const int fontObjNum = 3;
+        const int firstPageObjNum = 4;
+        var totalPages = pages.Count;
+
+        // 1: Catalog
+        StartObject(1);
+        WriteRaw("<< /Type /Catalog /Pages 2 0 R >>\n");
+        EndObject();
+
+        // 2: Pages
+        StartObject(2);
+        var kids = string.Join(" ", Enumerable.Range(0, totalPages).Select(k => $"{firstPageObjNum + (k * 2)} 0 R"));
+        WriteRaw($"<< /Type /Pages /Kids [{kids}] /Count {totalPages} >>\n");
+        EndObject();
+
+        // 3: Font (standard Helvetica - no embedding needed)
+        StartObject(fontObjNum);
+        WriteRaw("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n");
+        EndObject();
+
+        for (var k = 0; k < totalPages; k++)
+        {
+            var pageObjNum = firstPageObjNum + (k * 2);
+            var contentObjNum = pageObjNum + 1;
+
+            var content = new StringBuilder();
+            content.Append("BT\n/F1 11 Tf\n");
+            content.Append($"{marginLeft} {topY} Td\n{lineHeight} TL\n");
+
+            var first = true;
+            foreach (var line in pages[k])
+            {
+                var escaped = EscapePdfText(line);
+                content.Append(first ? $"({escaped}) Tj\n" : $"T*\n({escaped}) Tj\n");
+                first = false;
+            }
+
+            content.Append("ET");
+
+            var contentBytes = Encoding.Latin1.GetBytes(content.ToString());
+
+            StartObject(pageObjNum);
+            WriteRaw(
+                $"<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 {fontObjNum} 0 R >> >> " +
+                $"/MediaBox [0 0 {pageWidth} {pageHeight}] /Contents {contentObjNum} 0 R >>\n");
+            EndObject();
+
+            StartObject(contentObjNum);
+            WriteRaw($"<< /Length {contentBytes.Length} >>\nstream\n");
+            buffer.AddRange(contentBytes);
+            WriteRaw("\nendstream\n");
+            EndObject();
+        }
+
+        var xrefOffset = buffer.Count;
+        var objectCount = offsets.Count;
+
+        WriteRaw($"xref\n0 {objectCount + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+        {
+            WriteRaw($"{offset:D10} 00000 n \n");
+        }
+
+        WriteRaw($"trailer\n<< /Size {objectCount + 1} /Root 1 0 R >>\nstartxref\n{xrefOffset}\n%%EOF");
+
+        return buffer.ToArray();
+    }
+
+    private static string EscapePdfText(string text) =>
+        text.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
 
     private static string BuildTruncatedProductSummary(IEnumerable<string> productEntries, int maxLength)
     {
