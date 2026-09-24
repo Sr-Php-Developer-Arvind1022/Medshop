@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text.Json;
 using Medshop.Modules.Identity.Domain.Entities;
 using Medshop.Modules.Identity.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -91,9 +90,7 @@ public class LowStockWhatsAppAlertService : BackgroundService
 
         var recipientPhone = profileUser.Mobile;
         var apiKey = profileUser.WhatsAppApiKey ?? _configuration["WhatsApp:ApiKey"];
-        var profileTemplates = DeserializeTemplates(profileUser.WhatsAppTemplatesJson);
-        var templateCode = profileTemplates.FirstOrDefault(t => !string.IsNullOrWhiteSpace(t))
-            ?? _configuration["LowStockAlert:TemplateCode"]
+        var templateCode = _configuration["LowStockAlert:TemplateCode"]
             ?? _configuration["WhatsApp:TemplateCode"]
             ?? "LOW_QUANTITY_PRODUCT";
 
@@ -320,23 +317,5 @@ public class LowStockWhatsAppAlertService : BackgroundService
             .FirstOrDefaultAsync(cancellationToken);
 
         return user;
-    }
-
-    private static List<string> DeserializeTemplates(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return new List<string>();
-        }
-
-        try
-        {
-            var templates = JsonSerializer.Deserialize<List<string>>(json);
-            return templates ?? new List<string>();
-        }
-        catch
-        {
-            return new List<string>();
-        }
     }
 }
