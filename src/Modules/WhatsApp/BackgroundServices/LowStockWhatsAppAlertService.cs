@@ -65,67 +65,93 @@ public class LowStockWhatsAppAlertService : BackgroundService
         var dbContext = scope.ServiceProvider.GetRequiredService<MedshopDbContext>();
 
         var threshold = _configuration.GetValue<int>("LowStockAlert:Threshold", 10);
-        var products = await dbContext.Products
-            .Where(p => !p.IsDeleted && p.StockQuantity < threshold)
-            .OrderBy(p => p.StockQuantity)
-            .Select(p => new { p.Name, p.StockQuantity })
-            .ToListAsync(cancellationToken);
-
-        var mediaUrl = await GenerateLowStockPdfReportAsync(
-            products.Select(p => (p.Name, p.StockQuantity)).ToList(),
-            cancellationToken);
-
-        if (products.Count == 0)
-        {
-            _logger.LogInformation("No low-stock products found for alert check.");
-            return;
-        }
-
-        var profileUser = await GetProfileUserAsync(cancellationToken);
-        if (profileUser is null)
-        {
-            _logger.LogWarning("No profile user with WhatsApp configuration found. Low-stock alert skipped.");
-            return;
-        }
-
-        var recipientPhone = profileUser.Mobile;
-        var apiKey = profileUser.WhatsAppApiKey ?? _configuration["WhatsApp:ApiKey"];
         var templateCode = _configuration["LowStockAlert:TemplateCode"]
             ?? _configuration["WhatsApp:TemplateCode"]
             ?? "LOW_QUANTITY_PRODUCT";
 
+        // Every user with a mobile number is a candidate recipient; each one only gets
+        // alerted about their own products (matched via Product.LoginId == User.Id).
+        var users = await dbContext.Users
+            .Where(u => !string.IsNullOrWhiteSpace(u.Mobile))
+            .ToListAsync(cancellationToken);
+
+        if (users.Count == 0)
+        {
+            _logger.LogInformation("No users with a mobile number configured. Low-stock alert skipped.");
+            return;
+        }
+
+        foreach (var user in users)
+        {
+            await ProcessLowStockAlertForUserAsync(dbContext, user, threshold, templateCode, cancellationToken);
+        }
+    }
+
+    private async Task ProcessLowStockAlertForUserAsync(
+        MedshopDbContext dbContext,
+        User user,
+        int threshold,
+        string templateCode,
+        CancellationToken cancellationToken)
+    {
+        var products = await dbContext.Products
+            .Where(p => !p.IsDeleted && p.StockQuantity < threshold && p.LoginId == user.Id)
+            .OrderBy(p => p.StockQuantity)
+            .Select(p => new { p.Name, p.StockQuantity })
+            .ToListAsync(cancellationToken);
+
+        if (products.Count == 0)
+        {
+            // Nothing low on stock for this particular user - skip silently, this is the normal case.
+            return;
+        }
+
+        var recipientPhone = user.Mobile;
+        var apiKey = user.WhatsAppApiKey ?? _configuration["WhatsApp:ApiKey"];
+
         if (string.IsNullOrWhiteSpace(recipientPhone))
         {
-            _logger.LogWarning("No recipient phone found in profile settings. Low-stock alert skipped.");
+            _logger.LogWarning("No recipient phone found for user {UserId}. Low-stock alert skipped.", user.Id);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            _logger.LogWarning("WhatsApp API key missing. Low-stock alert skipped.");
+            _logger.LogWarning("WhatsApp API key missing for user {UserId}. Low-stock alert skipped.", user.Id);
             return;
         }
 
-        var ownerName = !string.IsNullOrWhiteSpace(profileUser.OwnerName) ? profileUser.OwnerName : "Customer";
+        var mediaUrl = await GenerateLowStockPdfReportAsync(
+            products.Select(p => (p.Name, p.StockQuantity)).ToList(),
+            cancellationToken,
+            user.Id);
+
+        var ownerName = !string.IsNullOrWhiteSpace(user.OwnerName)
+            ? user.OwnerName
+            : (!string.IsNullOrWhiteSpace(user.FullName) ? user.FullName : "Customer");
         var productSummary = BuildTruncatedProductSummary(products.Select(p => p.Name), maxLength: 120);
 
-        // The WapHub template requires "name", "items", "amount" and "date". When a PDF report is
-        // attached via media_url, the real product breakdown lives in the PDF, so we send dummy
-        // placeholders for items/amount here instead of the actual summary/count.
+        // The WapHub template requires "name", "items", "amount" and "date" for validation, but the
+        // rendered message body appears to use "products" / "count" placeholders. We send both sets
+        // so validation passes AND the visible text actually fills in.
         var variables = !string.IsNullOrWhiteSpace(mediaUrl)
             ? new Dictionary<string, object>
             {
                 ["name"] = ownerName,
                 ["items"] = "Test",
                 ["amount"] = "0",
-                ["date"] = DateTime.UtcNow.ToString("yyyy-MM-dd")
+                ["date"] = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                ["products"] = productSummary,
+                ["count"] = products.Count.ToString()
             }
             : new Dictionary<string, object>
             {
                 ["name"] = ownerName,
                 ["items"] = productSummary,
                 ["amount"] = products.Count.ToString(),
-                ["date"] = DateTime.UtcNow.ToString("yyyy-MM-dd")
+                ["date"] = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                ["products"] = productSummary,
+                ["count"] = products.Count.ToString()
             };
 
         var payload = new Dictionary<string, object?>
@@ -141,7 +167,9 @@ public class LowStockWhatsAppAlertService : BackgroundService
         }
         else
         {
-            _logger.LogWarning("Low-stock PDF report was not generated; sending alert without media_url.");
+            _logger.LogWarning(
+                "Low-stock PDF report was not generated for user {UserId}; sending alert without media_url.",
+                user.Id);
         }
 
         var client = _httpClientFactory.CreateClient("WapHub");
@@ -158,20 +186,22 @@ public class LowStockWhatsAppAlertService : BackgroundService
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError(
-                    "Low-stock WhatsApp alert failed. StatusCode: {StatusCode}. Response: {ResponseBody}",
+                    "Low-stock WhatsApp alert failed for user {UserId}. StatusCode: {StatusCode}. Response: {ResponseBody}",
+                    user.Id,
                     (int)response.StatusCode,
                     responseBody);
                 return;
             }
 
             _logger.LogInformation(
-                "Low-stock WhatsApp alert sent successfully to {RecipientPhone} for {ProductCount} product(s).",
+                "Low-stock WhatsApp alert sent successfully to {RecipientPhone} (user {UserId}) for {ProductCount} product(s).",
                 recipientPhone,
+                user.Id,
                 products.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception while sending low-stock WhatsApp alert.");
+            _logger.LogError(ex, "Exception while sending low-stock WhatsApp alert for user {UserId}.", user.Id);
         }
     }
 
@@ -182,7 +212,8 @@ public class LowStockWhatsAppAlertService : BackgroundService
     /// </summary>
     private async Task<string?> GenerateLowStockPdfReportAsync(
         IReadOnlyList<(string Name, int StockQuantity)> products,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? userId = null)
     {
         try
         {
@@ -204,7 +235,8 @@ public class LowStockWhatsAppAlertService : BackgroundService
             var reportsDirectory = Path.Combine(webRoot, "reports");
             Directory.CreateDirectory(reportsDirectory);
 
-            var fileName = $"low-stock-{DateTime.UtcNow:yyyyMMdd-HHmmss}.pdf";
+            var userSuffix = userId is null ? string.Empty : $"-{userId:N}";
+            var fileName = $"low-stock-{DateTime.UtcNow:yyyyMMdd-HHmmss}{userSuffix}.pdf";
             var filePath = Path.Combine(reportsDirectory, fileName);
 
             QuestPDF.Settings.License = LicenseType.Community;
@@ -304,18 +336,5 @@ public class LowStockWhatsAppAlertService : BackgroundService
 
         // Safety net: hard-cut in the unlikely case a single entry itself is longer than maxLength.
         return result.Length > maxLength ? result[..maxLength] : result;
-    }
-
-    private async Task<User?> GetProfileUserAsync(CancellationToken cancellationToken)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<MedshopDbContext>();
-
-        var user = await dbContext.Users
-            .Where(u => !string.IsNullOrWhiteSpace(u.WhatsAppApiKey) || !string.IsNullOrWhiteSpace(u.WhatsAppTemplatesJson))
-            .OrderByDescending(u => u.UpdatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return user;
     }
 }
