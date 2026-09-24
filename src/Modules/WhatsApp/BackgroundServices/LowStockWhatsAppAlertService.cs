@@ -283,7 +283,10 @@ public class LowStockWhatsAppAlertService : BackgroundService
             // yield here to keep the async signature honest for callers awaiting this method.
             await Task.CompletedTask;
 
-            return $"{publicBaseUrl}/reports/{fileName}";
+            var reportUrl = $"{publicBaseUrl}/reports/{fileName}";
+            _logger.LogInformation("Low-stock PDF report generated: {ReportUrl}", reportUrl);
+
+            return reportUrl;
         }
         catch (Exception ex)
         {
