@@ -31,7 +31,7 @@ public class LowStockWhatsAppAlertService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var intervalMinutes = _configuration.GetValue<int?>("LowStockAlert:RunAt") ?? 180;
+        var intervalMinutes = _configuration.GetValue<int?>("LowStockAlert:IntervalMinutes") ?? 600;
         var interval = intervalMinutes > 0 ? TimeSpan.FromMinutes(intervalMinutes) : TimeSpan.FromMinutes(5);
 
         using var timer = new PeriodicTimer(interval);
